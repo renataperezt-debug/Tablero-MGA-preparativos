@@ -629,7 +629,7 @@ select.fs-pri{background:var(--wh);border:1px solid var(--bd);padding:7px 9px;co
             <th style="width:115px">Est. Ejecución</th>
             <th style="width:90px">% MiDA</th>
             <th style="width:130px">Inicio / Término / Turno</th>
-            <th style="width:90px">Prom./día · Días</th>
+            <th style="width:90px">Prom./turno</th>
             <th style="width:95px">Duración · Hrs/turno</th>
             <th style="width:85px">Requerimientos</th>
             <th style="width:85px">Materiales</th>
@@ -2037,21 +2037,22 @@ function fchCell(row){
 }
 
 function dotCell(dotTotal,schedule){
-  const days=schedule&&schedule.length?new Set(schedule.map(s=>s.fecha)).size:1;
-  const avg=days>0?Math.round(dotTotal/days):dotTotal;
+  const numTurnos=schedule?schedule.length:0;
+  const avg=numTurnos>0?Math.round(dotTotal/numTurnos):dotTotal;
   const pct=Math.round(avg/MAX_DOT*100);
+  const days=schedule?new Set(schedule.map(s=>s.fecha)).size:0;
   return`<div class="dh-box">
     <div style="display:flex;align-items:baseline;gap:4px">
       <div class="dh-num dot-clr">${avg}</div>
-      <div class="dh-lbl" style="font-size:8px;color:var(--gm)">prom/día</div>
+      <div class="dh-lbl" style="font-size:8px;color:var(--gm)">prom/turno</div>
     </div>
     <div style="display:flex;align-items:center;gap:4px;margin-top:2px">
-      <span style="font-family:var(--fc);font-size:9px;font-weight:700;color:var(--gm)">⏱</span>
-      <span style="font-family:var(--fc);font-size:10px;font-weight:700;color:var(--go)">${days} día${days!==1?'s':''}</span>
+      <span style="font-family:var(--fc);font-size:9px;font-weight:700;color:var(--gm)">${numTurnos} turno${numTurnos!==1?'s':''} · ${days} día${days!==1?'s':''}</span>
     </div>
     <div class="dh-bar"><div class="dh-bar-f" style="width:${Math.min(pct,100)}%;background:var(--pu)"></div></div>
   </div>`;
 }
+
 function hrsCell(hrsTotal,uid,hrsTurn,schedule){
   const ht=hrsTurn||12;
   const numTurnos=schedule?schedule.length:0;
