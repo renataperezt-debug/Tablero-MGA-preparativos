@@ -2804,7 +2804,6 @@ function setupRealtime(){
       if(idx>=0){data[idx]={...data[idx],...incoming};}
       else{data.push(incoming);}
       renderTbl();updateCharts();
-      toast('🔄 Actualizado por otro usuario');
     })
     .on('postgres_changes',{event:'*',schema:'public',table:'mga_settings'},payload=>{
       if(payload.new&&payload.new.key==='mida_global'){
