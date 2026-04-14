@@ -1575,7 +1575,7 @@ function updHrsTurn(uid,val){
   r.hrsTotal=r.schedule.reduce((s,x)=>s+x.dotacion*hrs,0);
   r.schedule.forEach(s=>{s.horas=hrs;});
   updateCharts();
-  triggerAutoSave();
+  saveAll(); // save immediately on every change
 }
 
 // ══ IDLE REFRESH ══
@@ -1690,7 +1690,8 @@ function markUnsaved(){
 let autoSaveTimer=null;
 function triggerAutoSave(){
   clearTimeout(autoSaveTimer);
-  autoSaveTimer=setTimeout(()=>saveAll(),800);
+  // Save immediately on every change
+  autoSaveTimer=setTimeout(()=>saveAll(),50);
   markUnsaved();
 }
 
@@ -1842,10 +1843,7 @@ function clGet(cid){
 function clTog(cid,idx,done){
   document.getElementById(cid).querySelectorAll('.cl-tx')[idx]?.classList[done?'add':'remove']('done');
   updateCharts();
-  // Save immediately on checkbox to avoid losing state
-  clearTimeout(autoSaveTimer);
-  autoSaveTimer=setTimeout(()=>saveAll(),400);
-  markUnsaved();
+  saveAll(); // save immediately on checkbox toggle
 }
 function clDel(cid,idx){const its=clGet(cid);its.splice(idx,1);clRender(cid,its);updateCharts();}
 function clAdd(cid,iid){
@@ -2167,7 +2165,7 @@ function renderTbl(){
       <td>${row.ot?`<span class="ot-t">${row.ot}</span>`:'<span style="color:var(--gm);font-size:9px">—</span>'}</td>
       <td style="font-family:var(--fc);font-size:10px;font-weight:700;color:var(--go)">${row.planta||'—'}</td>
       <td style="font-size:11px;line-height:1.35">${row.desc}</td>
-      <td><input class="fi" style="font-size:10px;padding:3px 6px;min-width:88px;border-bottom:2px solid var(--gm);font-family:var(--fc);font-weight:700" value="${row.resp||''}" placeholder="—" oninput="updI('${row.uid}','resp',this.value);" onblur="editingUids.delete('${row.uid}');clearTimeout(window['_eu_'+'${row.uid}']);triggerAutoSave()" title="Responsable"></td>
+      <td><input class="fi" style="font-size:10px;padding:3px 6px;min-width:88px;border-bottom:2px solid var(--gm);font-family:var(--fc);font-weight:700" value="${row.resp||''}" placeholder="—" oninput="updI('${row.uid}','resp',this.value);" onblur="editingUids.delete('${row.uid}');clearTimeout(window['_eu_'+'${row.uid}']);saveAll()" title="Responsable"></td>
       <td>${(()=>{const ae=calcEstado(row);return chip(EC[ae]||'cp',ae);})()}</td>
       <td><select class="ej-sel ${ejClr(row.estEjecucion)}" onchange="updI('${row.uid}','estEjecucion',this.value);this.className='ej-sel '+ejClr(this.value);triggerAutoSave()">${ejOpts}</select></td>
       <td>${midaCell(row.uid,row.mida)}</td>
