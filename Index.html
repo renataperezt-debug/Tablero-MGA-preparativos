@@ -1617,8 +1617,7 @@ async function saveAll(){
     localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
     localStorage.setItem(STORAGE_KEY+'_mida',mg);
   }catch(e){}
-  // Show saving state
-  setSaveState(false);
+  // (saving state shown via markUnsaved debounce)
   const updTime=new Date().toLocaleTimeString('es-CL');
   // Try Supabase with retry
   for(let attempt=0;attempt<3;attempt++){
@@ -1639,15 +1638,32 @@ async function saveAll(){
   }
   // All Supabase attempts failed — localStorage already saved above
   setSaveState(true);
-  document.getElementById('last-upd').textContent=updTime+' (local)';
+  document.getElementById('last-upd').textContent=updTime;
   const ss=document.getElementById('sync-status');
-  if(ss){ss.textContent='⚠ Sin conexión — guardado local';ss.style.color='var(--am)';}
+  if(ss){ss.textContent='⚠ Sin conexión — local';ss.style.color='var(--am)';}
 }
+let _saveStateTimer=null;
 function setSaveState(saved){
-  document.getElementById('save-dot').className='save-dot'+(saved?'':' unsaved');
-  document.getElementById('save-lbl').textContent=saved?'Guardado':'Sin guardar';
+  // Debounce: only show 'Sin guardar' after 600ms of no saves to avoid flicker
+  clearTimeout(_saveStateTimer);
+  if(saved){
+    document.getElementById('save-dot').className='save-dot';
+    document.getElementById('save-lbl').textContent='Guardado';
+  } else {
+    _saveStateTimer=setTimeout(()=>{
+      document.getElementById('save-dot').className='save-dot unsaved';
+      document.getElementById('save-lbl').textContent='Guardando…';
+    },600);
+  }
 }
-function markUnsaved(){setSaveState(false);}
+function markUnsaved(){
+  // Don't update UI immediately — let the debounce handle it
+  clearTimeout(_saveStateTimer);
+  _saveStateTimer=setTimeout(()=>{
+    document.getElementById('save-dot').className='save-dot unsaved';
+    document.getElementById('save-lbl').textContent='Guardando…';
+  },600);
+}
 
 let autoSaveTimer=null;
 function triggerAutoSave(){
