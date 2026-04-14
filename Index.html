@@ -1576,53 +1576,70 @@ function updHrsTurn(uid,val){
 }
 // ══ PERSIST: Load saved data ══
 async function loadSaved(){
+  let sbOk=false;
   try{
-    // Try Supabase first
-    const {data:rows,error}=await _sb.from('mga_activities').select('uid,payload').order('uid');
+    const {data:rows,error}=await _sb.from('mga_activities').select('uid,payload,updated_at').order('uid');
     if(!error&&rows&&rows.length>0){
       rows.forEach(row=>{
         const idx=data.findIndex(d=>d.uid===row.uid);
-        const merged={...( idx>=0?data[idx]:{}), ...row.payload};
+        const merged={...(idx>=0?data[idx]:{}), ...row.payload};
         if(idx>=0) data[idx]=merged; else data.push(merged);
       });
       const {data:setting}=await _sb.from('mga_settings').select('value').eq('key','mida_global').maybeSingle();
       if(setting) document.getElementById('mida-global').value=setting.value;
       setSaveState(true);
-      return;
+      sbOk=true;
     }
   }catch(e){console.warn('Supabase load error:',e);}
-  // Fallback localStorage
-  try{
-    const raw=localStorage.getItem(STORAGE_KEY);
-    if(!raw) return;
-    const saved=JSON.parse(raw);
-    saved.forEach(s=>{
-      const idx=data.findIndex(d=>d.uid===s.uid);
-      if(idx>=0) data[idx]={...data[idx],...s}; else data.push(s);
-    });
-    const mg=localStorage.getItem(STORAGE_KEY+'_mida');
-    if(mg) document.getElementById('mida-global').value=mg;
-  }catch(e){}
+  // Always also check localStorage — if it has data and Supabase failed, use it
+  if(!sbOk){
+    try{
+      const raw=localStorage.getItem(STORAGE_KEY);
+      if(!raw) return;
+      const saved=JSON.parse(raw);
+      saved.forEach(s=>{
+        const idx=data.findIndex(d=>d.uid===s.uid);
+        if(idx>=0) data[idx]={...data[idx],...s}; else data.push(s);
+      });
+      const mg=localStorage.getItem(STORAGE_KEY+'_mida');
+      if(mg) document.getElementById('mida-global').value=mg;
+      // Push localStorage data to Supabase to sync
+      setTimeout(()=>saveAll(),2000);
+    }catch(e){}
+  }
 }
 async function saveAll(){
   const mg=document.getElementById('mida-global').value;
-  try{
-    const upserts=data.map(r=>({uid:r.uid,payload:r,updated_at:new Date().toISOString()}));
-    const {error}=await _sb.from('mga_activities').upsert(upserts,{onConflict:'uid'});
-    if(!error){
-      await _sb.from('mga_settings').upsert({key:'mida_global',value:mg},{onConflict:'key'});
-      setSaveState(true);
-      document.getElementById('last-upd').textContent=new Date().toLocaleTimeString('es-CL');
-      return;
-    }
-  }catch(e){console.warn('Supabase save error:',e);}
-  // Fallback localStorage
+  // Always write localStorage immediately as safety net
   try{
     localStorage.setItem(STORAGE_KEY,JSON.stringify(data));
     localStorage.setItem(STORAGE_KEY+'_mida',mg);
-    setSaveState(true);
-    document.getElementById('last-upd').textContent=new Date().toLocaleTimeString('es-CL');
-  }catch(e){console.warn('localStorage no disponible',e);}
+  }catch(e){}
+  // Show saving state
+  setSaveState(false);
+  const updTime=new Date().toLocaleTimeString('es-CL');
+  // Try Supabase with retry
+  for(let attempt=0;attempt<3;attempt++){
+    try{
+      const upserts=data.map(r=>({uid:r.uid,payload:r,updated_at:new Date().toISOString()}));
+      const {error}=await _sb.from('mga_activities').upsert(upserts,{onConflict:'uid'});
+      if(!error){
+        await _sb.from('mga_settings').upsert({key:'mida_global',value:mg},{onConflict:'key'});
+        setSaveState(true);
+        document.getElementById('last-upd').textContent=updTime;
+        return;
+      }
+      console.warn('Supabase upsert error (attempt '+attempt+'):',error);
+    }catch(e){
+      console.warn('Supabase save exception (attempt '+attempt+'):',e);
+    }
+    if(attempt<2) await new Promise(r=>setTimeout(r,1000*(attempt+1)));
+  }
+  // All Supabase attempts failed — localStorage already saved above
+  setSaveState(true);
+  document.getElementById('last-upd').textContent=updTime+' (local)';
+  const ss=document.getElementById('sync-status');
+  if(ss){ss.textContent='⚠ Sin conexión — guardado local';ss.style.color='var(--am)';}
 }
 function setSaveState(saved){
   document.getElementById('save-dot').className='save-dot'+(saved?'':' unsaved');
@@ -1633,7 +1650,7 @@ function markUnsaved(){setSaveState(false);}
 let autoSaveTimer=null;
 function triggerAutoSave(){
   clearTimeout(autoSaveTimer);
-  autoSaveTimer=setTimeout(()=>saveAll(),800);
+  autoSaveTimer=setTimeout(()=>saveAll(),1200);
   markUnsaved();
 }
 
@@ -1784,7 +1801,11 @@ function clGet(cid){
 }
 function clTog(cid,idx,done){
   document.getElementById(cid).querySelectorAll('.cl-tx')[idx]?.classList[done?'add':'remove']('done');
-  updateCharts();triggerAutoSave();
+  updateCharts();
+  // Save immediately on checkbox to avoid losing state
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(()=>saveAll(),400);
+  markUnsaved();
 }
 function clDel(cid,idx){const its=clGet(cid);its.splice(idx,1);clRender(cid,its);updateCharts();}
 function clAdd(cid,iid){
@@ -2645,9 +2666,9 @@ function saveMo(){
   row.hrsTurn=hrs;
   row.dotTotal=row.schedule.reduce((s,x)=>s+x.dotacion,0);
   row.hrsTotal=row.schedule.reduce((s,x)=>s+x.dotacion*hrs,0);
-  closeMo();fillRespFilter();renderTbl();saveAll();toast('✓ Cambios guardados');
+  closeMo();fillRespFilter();renderTbl();saveAll().then(()=>toast('✓ Cambios guardados'));
 }
-function delRow(){if(!confirm('¿Eliminar esta actividad?'))return;data=data.filter(r=>r.uid!==editId);closeMo();renderTbl();saveAll();toast('Eliminada');}
+function delRow(){if(!confirm('¿Eliminar esta actividad?'))return;data=data.filter(r=>r.uid!==editId);closeMo();renderTbl();saveAll().then(()=>toast('Eliminada'));}
 
 // ══ SETTINGS ══
 function openSettings(){tempUbicOpts=[...ubicOpts];renderUbicList();document.getElementById('set-mo').classList.add('open');}
